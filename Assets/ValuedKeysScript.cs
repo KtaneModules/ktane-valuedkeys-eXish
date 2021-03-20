@@ -128,4 +128,12 @@ public class ValuedKeysScript : MonoBehaviour {
             yield break;
         }
     }
+    IEnumerator TwitchHandleForcedSolve()
+    {
+        while (!moduleSolved)
+        {
+            buttons[UnityEngine.Random.Range(0, 4)].OnInteract();
+            yield return new WaitForSeconds(0.02f);
+        }
+    }
 }
