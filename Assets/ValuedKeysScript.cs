@@ -64,16 +64,17 @@ public class ValuedKeysScript : MonoBehaviour {
     {
         if (moduleSolved != true)
         {
+            int index = Array.IndexOf(buttons, pressed);
             pressed.AddInteractionPunch();
             audio.PlayGameSoundAtTransform(KMSoundOverride.SoundEffect.ButtonPress, pressed.transform);
-            keyVals[keyInc[Array.IndexOf(buttons, pressed)]] += 1;
-            keyVals[keyDec[Array.IndexOf(buttons, pressed)]] -= 1;
-            if (keyVals[keyInc[Array.IndexOf(buttons, pressed)]] > 9)
-                keyVals[keyInc[Array.IndexOf(buttons, pressed)]] = 0;
-            if (keyVals[keyDec[Array.IndexOf(buttons, pressed)]] < 0)
-                keyVals[keyDec[Array.IndexOf(buttons, pressed)]] = 9;
-            texts[keyInc[Array.IndexOf(buttons, pressed)]].text = keyVals[keyInc[Array.IndexOf(buttons, pressed)]].ToString();
-            texts[keyDec[Array.IndexOf(buttons, pressed)]].text = keyVals[keyDec[Array.IndexOf(buttons, pressed)]].ToString();
+            keyVals[keyInc[index]] += 1;
+            keyVals[keyDec[index]] -= 1;
+            if (keyVals[keyInc[index]] > 9)
+                keyVals[keyInc[index]] = 0;
+            if (keyVals[keyDec[index]] < 0)
+                keyVals[keyDec[index]] = 9;
+            texts[keyInc[index]].text = keyVals[keyInc[index]].ToString();
+            texts[keyDec[index]].text = keyVals[keyDec[index]].ToString();
             if (keyVals.All(x => x == bomb.GetSerialNumberNumbers().First()))
             {
                 moduleSolved = true;
@@ -132,10 +133,130 @@ public class ValuedKeysScript : MonoBehaviour {
 
     IEnumerator TwitchHandleForcedSolve()
     {
-        while (!moduleSolved)
+        string command;
+        int firstDigit = bomb.GetSerialNumberNumbers().First();
+        if (keyVals.SequenceEqual(new[] { firstDigit, firstDigit, firstDigit, firstDigit }))
         {
-            buttons[UnityEngine.Random.Range(0, 4)].OnInteract();
-            yield return new WaitForSeconds(0.02f);
+            for (int i = 0; i < keyVals.Length; i++)
+            {
+                if (keyInc[i] == keyDec[i])
+                {
+                    
+                    yield return ProcessTwitchCommand("press " + (i + 1));
+                    yield break;
+                }
+            }
+            int indexToPress = UnityEngine.Random.Range(1, 5);
+            command = string.Format("press {0}", string.Join(" ", Enumerable.Range(0, 10).Select(x => indexToPress.ToString()).ToArray()));
+            yield return ProcessTwitchCommand(command);
         }
+        else
+        {
+            command = string.Format("press {0}", string.Join(" ", BFS().Select(x => x.ToString()).ToArray()));
+            yield return ProcessTwitchCommand(command);
+        }
+        
+    }
+
+    class State : IEquatable<State>
+    {
+        public State PreviousState { get; private set; }
+        public int IndexToPress { get; private set; }
+
+        private int[] _currentNumbers;
+        private int[] _goal;
+        private int[] _inc;
+        private int[] _dec;
+
+        public State(int[] currentNumbers, int[] goal, int[] inc, int[] dec, State previousState = null, int indexToPress = -1)
+        {
+            _currentNumbers = currentNumbers;
+            _goal = goal;
+            _inc = inc;
+            _dec = dec;
+            PreviousState = previousState;
+            IndexToPress = indexToPress;
+        }
+
+        public bool IsGoal()
+        {
+            return _currentNumbers.SequenceEqual(_goal);
+        }
+
+        public List<State> GetSuccessors()
+        {
+            List<State> successors = new List<State>();
+            for (int i = 0; i < _inc.Length; i++)
+            {
+                int incIndex = _inc[i];
+                int decIndex = _dec[i];
+                if (incIndex == decIndex)
+                    continue;
+                int[] newNumbers = _currentNumbers.ToArray();
+                newNumbers[incIndex] = (newNumbers[incIndex] + 1) % 10;
+                newNumbers[decIndex] = (newNumbers[decIndex] + 9) % 10;
+                successors.Add(new State(newNumbers, _goal, _inc, _dec, this, i + 1));
+            }
+            return successors;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj == null || !GetType().Equals(obj.GetType()))
+                return false;
+
+            return Equals((State)obj);
+        }
+
+        public bool Equals(State otherState)
+        {
+            return _currentNumbers.SequenceEqual(otherState._currentNumbers) &&
+                   _goal.SequenceEqual(otherState._goal) &&
+                   _inc.SequenceEqual(otherState._inc) &&
+                   _dec.SequenceEqual(otherState._dec);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 31;
+                hash = hash * 47 + _currentNumbers.GetHashCode();
+                hash = hash * 19 + _goal.GetHashCode();
+                hash = hash * 53 + _inc.GetHashCode();
+                hash = hash * 97 + _dec.GetHashCode();
+                return hash;
+            }
+        }
+    }
+
+    List<int> BFS()
+    {
+        int goalNumber = bomb.GetSerialNumberNumbers().First();
+        State firstState = new State(keyVals, new[] { goalNumber, goalNumber, goalNumber, goalNumber }, keyInc, keyDec);
+        Queue<State> queue = new Queue<State>();
+        queue.Enqueue(firstState);
+        List<State> visited = new List<State>();
+        while (queue.Count != 0)
+        {
+            State currentState = queue.Dequeue();
+            if (currentState.IsGoal())
+            {
+                List<int> indicesToPress = new List<int>();
+                while (currentState.PreviousState != null)
+                {
+                    indicesToPress.Add(currentState.IndexToPress);
+                    currentState = currentState.PreviousState;
+                }
+                indicesToPress.Reverse();
+                return indicesToPress;
+            }
+            foreach (State newState in currentState.GetSuccessors())
+            {
+                if (!queue.Contains(newState) && !visited.Contains(newState))
+                    queue.Enqueue(newState);
+            }
+        }
+        throw new Exception("Error: Could not find a solution.");
     }
 }
