@@ -4,6 +4,7 @@ using UnityEngine;
 using KModkit;
 using System.Text.RegularExpressions;
 using System;
+using System.Collections.Generic;
 
 public class ValuedKeysScript : MonoBehaviour {
 
@@ -128,6 +129,7 @@ public class ValuedKeysScript : MonoBehaviour {
             yield break;
         }
     }
+
     IEnumerator TwitchHandleForcedSolve()
     {
         while (!moduleSolved)
